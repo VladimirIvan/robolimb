@@ -1,13 +1,9 @@
-""" Setup script for robolimb package. """
+from distutils.core import setup
+from catkin_pkg.python_setup import generate_distutils_setup
 
-from setuptools import setup
+# fetch values from package.xml
+setup_args = generate_distutils_setup(
+    packages=['robolimb'],
+    package_dir={'': 'src'})
 
-setup(
-    name = "robolimb",
-    version = "0.0.1",
-    author = "Agamemnon Krasoulis",
-    description = ("Interface the Touch Bionics (Össur) RoboLimb " + \
-                   "prosthetic/robotic hand in Python via CAN."),
-    url = "https://github.com/agamemnonc/robolimb",
-    packages=['robolimb']
-)
+setup(**setup_args)
