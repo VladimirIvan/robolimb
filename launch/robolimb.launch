@@ -1,0 +1,7 @@
+<launch>
+
+  <node ns="/nextagea/robolimb/" pkg="robolimb" type="ros_node.py" name="robolimb_ros_node_left" output="screen">
+    <param name="port" type="string" value="/dev/can" />
+  </node>
+
+</launch>

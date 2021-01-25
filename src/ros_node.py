@@ -1,15 +1,18 @@
+#!/usr/bin/env python
 import rospy
 import sys
 import time
 import threading
-from .robolimb import RoboLimbCAN as RoboLimb
-from .robolimb import SerialCommsBus
+from robolimb import RoboLimbCAN as RoboLimb
+from robolimb import SerialCommsBus
 from six.moves import input
 from std_msgs.msg import Float64MultiArray
 
 class Ros_node(object):
     def __init__(self):
-        bus = SerialCommsBus()
+        port = rospy.get_param('~port', '/dev/can')
+        rospy.loginfo('Openning port ' + port)
+        bus = SerialCommsBus(port=port)
         self.r = RoboLimb(bus)
         self.r.start()
         self.r.open_all()

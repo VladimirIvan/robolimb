@@ -10,10 +10,10 @@ catkin_package()
 
 catkin_python_setup()
 
- catkin_install_python(PROGRAMS
-   scripts/ros_node.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
- )
+#  catkin_install_python(PROGRAMS
+#    src/ros_node.py
+#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#  )
 
 
 
