@@ -1,0 +1,2 @@
+SUBSYSTEM=="tty", ATTRS{idProduct}=="fac6", ATTRS{idVendor}=="0403", SYMLINK+="can can$attr{port_number} can_$attr{serial}", MODE="0666"
+ACTION=="add", ATTRS{idProduct}=="fac6", ATTRS{idVendor}=="0403", RUN+="/sbin/modprobe ftdi_sio" RUN+="/bin/sh -c 'echo 0403 fac6 > /sys/bus/usb-serial/drivers/ftdi_sio/new_id'"
