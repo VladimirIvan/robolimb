@@ -1,9 +1,7 @@
 import threading
+import serial
 
-from can.interfaces.pcan.basic import (PCANBasic, PCAN_USBBUS1, PCAN_BAUD_1M,
-                                       PCAN_TYPE_ISA, PCAN_ERROR_QRCVEMPTY,
-                                       PCAN_ERROR_OK, TPCANMsg,
-                                       PCAN_MESSAGE_STANDARD)
+from time import sleep
 
 # Refer to robo-limb manual for definition of number codes below
 N_DOF = 6
@@ -46,6 +44,81 @@ QUICK_GRIPS = {
     'cover': '18'
 }
 
+class CommsBus:
+    def open(self):
+        raise RuntimeError('Not implemented')
+    def close(self):
+        raise RuntimeError('Not implemented')
+    def write(self, id, data):
+        raise RuntimeError('Not implemented')
+    def read(self):
+        raise RuntimeError('Not implemented')
+    def reset(self):
+        raise RuntimeError('Not implemented')
+    def __read_messages(self, num_messages=None):
+        raise RuntimeError('Not implemented')
+
+class SerialCommsBus(CommsBus):
+
+    def __init__(self,
+                port='/dev/can',
+                baudrate=115200):
+        self.port = port
+        self.baudrate = baudrate
+
+    def check_error(self, msg, code=b'\r'):
+        ret = self.bus.read_until(b'\r')
+        if ret != code:
+            print('Data:', ret, code)
+            raise RuntimeError(msg)
+
+    def open(self):
+        """Starts the CAN BUS connection."""
+        
+        self.bus = serial.Serial(self.port, baudrate=self.baudrate)
+        self.bus.read_all()
+        self.bus.write(b'V\r')
+        version = self.bus.read_until(b'\r').decode('utf-8')
+        
+        # Clean the buffer
+        self.bus.read_all()
+        # Set CAN data rate
+        self.bus.write(b'S8\r')
+        self.bus.write(b'C\r')
+        self.check_error('Cannot set CAN data rate!')
+        print('Version:', version)
+        # Open channel
+        self.bus.write(b'O\r')
+        self.check_error('Cannot open CAN channel!')        
+        self.reset()
+        # self.bus.write(b'C\r')
+
+    def close(self):
+        """Stops reading incoming CAN messages and shuts down the
+        connection."""
+
+        self.bus.write(b'C\r')
+        self.bus.close()
+
+    def write(self, id, data):
+        msg = ''.join([format(id,'03x'), format(len(data),'01x')] + data).encode('utf-8')
+        print(msg)
+        self.bus.write(b't' + msg + b'\r')
+        sleep(0.12)
+
+    def read(self):
+        msg = self.bus.read_until(b'\r')
+        # msg = ''.join([format(id,'03x'), format(len(data),'01x')] + data).encode('utf-8')
+        print(msg)
+        return msg
+        
+
+    def reset(self):
+        # Clear transmit data buffers
+        self.bus.read_all()
+        self.bus.write(b'E\r')
+        self.check_error('Cannot clear buffer!', b'E\r')
+
 
 class RoboLimbCAN(object):
     """ Robo-limb control via CAN bus interface.
@@ -81,38 +154,18 @@ class RoboLimbCAN(object):
     There seems to be an issue with the current values provided by the hand.
     """
 
-    def __init__(self,
-                 def_vel=297,
-                 channel=PCAN_USBBUS1,
-                 b_rate=PCAN_BAUD_1M,
-                 hw_type=PCAN_TYPE_ISA,
-                 io_port=0x3BC,
-                 interrupt=3):
+    def __init__(self, bus, def_vel=297):
+        self.bus = bus
         self.def_vel = def_vel
-        self.channel = channel
-        self.b_rate = b_rate
-        self.hw_type = hw_type
-        self.io_port = io_port
-        self.interrupt = interrupt
-
-        self.__finger_status = [None] * N_DOF
-        self.__finger_current = [None] * N_DOF
-        self.__rotator_edge = None
 
     def start(self):
         """Starts the CAN BUS connection."""
-        self.bus = PCANBasic()
-        self.bus.Initialize(
-            Channel=self.channel,
-            Btr0Btr1=self.b_rate,
-            HwType=self.hw_type,
-            IOPort=self.io_port,
-            Interrupt=self.interrupt)
+        self.bus.open()
 
     def stop(self):
         """Stops reading incoming CAN messages and shuts down the
         connection."""
-        self.bus.Uninitialize(Channel=self.channel)
+        self.bus.close()
 
     def open_finger(self, finger, velocity=None, force=True, update=True):
         """Opens digit at specified velocity.
@@ -214,6 +267,7 @@ class RoboLimbCAN(object):
 
         if send_command:
             self.__motor_command(finger, ACTIONS['stop'], 297)
+        print('stopped')
 
     def open_fingers(self, velocity=None, force=True, update=True):
         """Opens all digits except thumb rotator at specified velocity.
@@ -403,10 +457,9 @@ class RoboLimbCAN(object):
             raise ValueError("The specified grip is invalid.")
 
         id = int('0x301', 16)
-        msg = ['0', '0', '0', QUICK_GRIPS[grip]]
-        can_msg = self.__can_message(id, msg)
+        msg = ['00', '00', '00', QUICK_GRIPS[grip]]
 
-        self.bus.Write(self.channel, can_msg)
+        self.bus.write(id, msg)
 
     def get_serial_number(self):
         """Queries the device serial number.
@@ -417,13 +470,12 @@ class RoboLimbCAN(object):
             Device serial number.
         """
         id = int('0x402', 16)
-        msg = ['0', '0', '0', '0']
-        can_msg = self.__can_message(id, msg)
+        msg = ['00', '00', '00', '00']
 
         # Reset queue such that first received message is the query response
         self.reset_bus()
-        self.bus.Write(self.channel, can_msg)
-        sn_msg = self.__read_messages(num_messages=1)[0]
+        self.bus.write(id, msg)
+        sn_msg = self.bus.__read_messages(num_messages=1)[0]
         # See manual p.14 for message format
         letters = hex(sn_msg[1].DATA[0])[2:] + hex(sn_msg[1].DATA[1])[2:]
         numbers = hex(sn_msg[1].DATA[2])[2:] + hex(sn_msg[1].DATA[3])[2:]
@@ -432,32 +484,9 @@ class RoboLimbCAN(object):
 
     def reset_bus(self):
         """Resets the receive and transmit queues of the PCAN channel."""
-        self.bus.Reset(self.channel)
+        self.bus.Reset()
 
-    def __can_message(self, id, data):
-        """Creates a CAN message from corresponding CAN ID and data.
-
-        Parameters
-        ----------
-        message_id : int
-            CAN message ID.
-
-        message_data : list of str
-            CAN message data. A list of strings of length 4 is expected.
-
-        Returns
-        -------
-        can_msg : pcan definition
-            CAN message.
-        """
-        can_msg = TPCANMsg()
-        can_msg.ID = id
-        can_msg.LEN = 4
-        can_msg.MSGTYPE = PCAN_MESSAGE_STANDARD
-        for i in range(can_msg.LEN):
-            can_msg.DATA[i] = int(data[i], 16)
-
-        return can_msg
+    
 
     def __motor_command(self, finger, action, velocity):
         """Issues a low-level finger command.
@@ -473,8 +502,8 @@ class RoboLimbCAN(object):
             default velocity will be used.
         """
         id, data = self.__motor_message(finger, action, velocity)
-        can_msg = self.__can_message(id, data)
-        self.bus.Write(self.channel, can_msg)
+        self.bus.write(id, data)
+        print(data)
 
     def __motor_message(self, finger, action, velocity):
         """Creates CAN message ID and data for a motor command.
@@ -500,48 +529,10 @@ class RoboLimbCAN(object):
         velocity = format(velocity, '04x')
         data = [0] * 4
         data[0] = '00'  # Empty
-        data[1] = str(action)
+        data[1] = format(action,'02')
         data[2] = velocity[0:2]
         data[3] = velocity[2:4]
         return id, data
-
-    def __read_messages(self, num_messages=None):
-        """Reads either a specified number of messages or all available
-        messages from the queue.
-
-        Parameters
-        ----------
-        num_messages : int, optional (default: None)
-            Number of messages to read. If ``None``, read all messages unti
-            queue is empty.
-
-        Returns
-        -------
-        messages : list
-            List of incoming CAN messages.
-
-        Notes
-        -----
-        When the number of messages is specified, the method will block
-        execution until the messages become available, i.e., there is no
-        timeout implementation. If, for any reason, CAN messages do not arrive
-        in the queue, the program may not exit the loop.
-        """
-        messages = []
-        if num_messages:
-            while len(messages) < num_messages:
-                can_msg = self.bus.Read(self.channel)
-                if can_msg[0] == PCAN_ERROR_OK:
-                    messages.append(can_msg)
-        else:
-            res = 0
-            while res != PCAN_ERROR_QRCVEMPTY:
-                can_msg = self.bus.Read(self.channel)
-                res = can_msg[0]
-                if res == PCAN_ERROR_OK:
-                    messages.append(can_msg)
-
-        return messages
 
     def __process_feedback_message(self, can_msg):
         """Processes an incoming CAN feedback message.
@@ -580,7 +571,7 @@ class RoboLimbCAN(object):
         """Requests 6 CAN feedback messages and updates finger status and
         currents."""
         self.reset_bus()
-        msgs = self.__read_messages(num_messages=6)
+        msgs = self.bus.__read_messages(num_messages=6)
         for msg in msgs:
             result = self.__process_feedback_message(msg)
             f_id, f_status, thumb_edge, f_current = result
@@ -598,13 +589,12 @@ class RoboLimbCAN(object):
             Quick grip.
         """
         id = int('0x302', 16)
-        msg = ['0', '0', '0', '0']
-        can_msg = self.__can_message(id, msg)
+        msg = ['00', '00', '00', '00']
 
         # Reset queue such that first received message is the query response
         self.reset_bus()
-        self.bus.Write(self.channel, can_msg)
-        grip_msg = self.__read_messages(num_messages=1)[0]
+        self.bus.write(id, msg)
+        grip_msg = self.bus.__read_messages(num_messages=1)[0]
         # Grip codes have two digits, fill with zeros if needed
         code = hex(grip_msg[1].DATA[3])[2:].zfill(2)
         for grip_, code_ in QUICK_GRIPS.items():
@@ -624,10 +614,6 @@ class RoboLimbCAN(object):
     def __can_to_finger_id(self, id_string):
         """Returns the finger ID from a corresponding CAN ID."""
         return int(id_string[4])
-
-    def __del__(self):
-        """Stops CAN bus connection upon destruction."""
-        self.stop()
 
     @property
     def is_moving_(self):

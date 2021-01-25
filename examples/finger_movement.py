@@ -9,11 +9,15 @@ import sys
 import time
 import threading
 from robolimb import RoboLimbCAN as RoboLimb
+# from robolimb import PeakCommsBus
+from robolimb import SerialCommsBus
 from six.moves import input
 
 class RoboLimbFingerExample(object):
     def __init__(self):
-        self.r = RoboLimb()
+        # bus = PeakCommsBus()
+        bus = SerialCommsBus()
+        self.r = RoboLimb(bus)
 
     def start(self):
         self.r.start()
@@ -42,10 +46,12 @@ class RoboLimbFingerExample(object):
                     time_ = float(input("Select action time (ms) \n"))
 
                 if action == 1:
+                    print('closing')
                     self.r.close_finger(finger, vel)
                     threading.Timer(
                         time_ * 1e-3, self.r.stop_finger, [finger, vel]).start()
                 elif action == 2:
+                    print('openning')
                     self.r.open_finger(finger, vel)
                     threading.Timer(
                         time_ * 1e-3, self.r.stop_finger, [finger, vel]).start()
