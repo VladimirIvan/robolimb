@@ -17,6 +17,7 @@ class Ros_node(object):
         self.r.start()
         self.r.open_all()
         time.sleep(1.5)
+        self.command_time = time.time()
 
     def start(self):
         rospy.loginfo('Listening for commands')
@@ -25,6 +26,12 @@ class Ros_node(object):
 
     def callback(self, data):
         rospy.loginfo('Received command: ' + str(data.data))
+        now = time.time()
+        print(now - self.command_time)
+        if now - self.command_time < 0.2:
+            return
+
+        self.command_time = now
         for i in range(len(data.data)):
             if data.data[i] < -1.0 or data.data[i] > 1.0:
                 rospy.logerr('Invalid finger command!')

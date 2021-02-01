@@ -1,6 +1,6 @@
 <launch>
 
-  <node ns="/nextagea/robolimb/" pkg="robolimb" type="ros_node.py" name="robolimb_ros_node_left" output="screen">
+  <node ns="/nextagea/robolimb/" pkg="robolimb" type="ros_node.py" name="robolimb_ros_node_left" output="screen" respawn="true">
     <param name="port" type="string" value="/dev/can" />
   </node>
 

@@ -104,7 +104,7 @@ class SerialCommsBus(CommsBus):
         msg = ''.join([format(id,'03x'), format(len(data),'01x')] + data).encode('utf-8')
         print(msg)
         self.bus.write(b't' + msg + b'\r')
-        sleep(0.12)
+        sleep(0.02)
 
     def read(self):
         msg = self.bus.read_until(b'\r')
