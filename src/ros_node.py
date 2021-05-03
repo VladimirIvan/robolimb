@@ -5,12 +5,22 @@ import time
 import threading
 from robolimb import RoboLimbCAN as RoboLimb
 from robolimb import SerialCommsBus
-from six.moves import input
 from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import JointState
 
 class Ros_node(object):
     def __init__(self):
         port = rospy.get_param('~port', '/dev/can')
+        self.joint = rospy.get_param('~joint_names', [])
+
+        self.pub = rospy.Publisher('state', JointState, queue_size=10)
+        self.msg = JointState()
+        self.msg.position = [0.0] * 10
+        self.msg.velocity = [0.0] * 10
+        self.msg.name = self.joint
+
+        self.last_position = [0.0] * 6
+
         rospy.loginfo('Openning port ' + port)
         bus = SerialCommsBus(port=port)
         self.r = RoboLimb(bus)
@@ -22,12 +32,22 @@ class Ros_node(object):
     def start(self):
         rospy.loginfo('Listening for commands')
         rospy.Subscriber("command", Float64MultiArray, self.callback)
-        rospy.spin()
+        rate = rospy.Rate(100.0)
+        while not rospy.is_shutdown():
+            self.msg.header.stamp = rospy.Time.now()
+            for i in range(6):
+                self.msg.position[i] = self.last_position[i]
+                if i >= 1 and i <= 4:
+                    self.msg.position[i+5] = self.last_position[i]
+            self.pub.publish(self.msg)
+            rate.sleep()
 
     def callback(self, data):
         rospy.loginfo('Received command: ' + str(data.data))
+        if len(data.data) != 6:
+            raise RuntimeError('Invalid trajectory data size!')
+
         now = time.time()
-        print(now - self.command_time)
         if now - self.command_time < 0.2:
             return
 
@@ -37,8 +57,6 @@ class Ros_node(object):
                 rospy.logerr('Invalid finger command!')
                 return
             if data.data[i!=5] < 0 and data.data[5] < 0:
-                print(data.data[i])
-                rospy.logerr('---')
                 return
         for i in range(len(data.data)):
             if data.data[i] < 0:
@@ -47,6 +65,13 @@ class Ros_node(object):
                 self.r.open_finger(i+1, int(data.data[i]*self.r.def_vel))
             else:
                 self.r.stop_finger(i+1)
+
+        for i in range(6):
+            if data.data[i] > 0.0:
+                self.last_position[i] = 0.0
+            elif data.data[i] < 0.0:
+                self.last_position[i] = 1.4
+        
 
 if __name__ == "__main__":
     rospy.init_node('listener', anonymous=True)
