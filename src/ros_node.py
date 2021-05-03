@@ -15,8 +15,8 @@ class Ros_node(object):
 
         self.pub = rospy.Publisher('state', JointState, queue_size=10)
         self.msg = JointState()
-        self.msg.position = [0.0] * 9
-        self.msg.velocity = [0.0] * 9
+        self.msg.position = [0.0] * 10
+        self.msg.velocity = [0.0] * 10
         self.msg.name = self.joint
 
         self.last_position = [0.0] * 6
